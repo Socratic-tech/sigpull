@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tunable Handwriting Background Remover</title>
+    <title>Real-Time Transparent Handwriting Extractor</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -38,13 +38,6 @@
         input[type="range"] {
             width: 100%;
         }
-        #preview-image {
-            max-width: 100%;
-            height: auto;
-            display: block;
-            margin: 15px 0;
-            border: 1px dashed #ccc;
-        }
         #output-area {
             margin-top: 20px;
             padding: 15px;
@@ -62,13 +55,15 @@
             font-weight: bold;
             margin-bottom: 10px;
         }
+        /* Hidden elements based on user request */
+        #preview-image { display: none; } 
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>🎚️ Tunable Transparent Handwriting Extractor</h2>
-    <p>Upload an image and use the sliders to fine-tune the background removal.</p>
+    <h2>✍️ Real-Time Transparency Tuner</h2>
+    <p>Upload an image, then move the sliders to see the transparent output update instantly.</p>
 
     <input type="file" id="imageInput" accept="image/*">
     <p id="status">Upload an image to start.</p>
@@ -85,20 +80,17 @@
         <label for="puritySlider" class="slider-label">
             Black Purity (<span id="purityValue">100</span>%):
         </label>
-        <p style="font-size: 0.9em; margin-top: 0;">Controls how purely black the kept handwriting becomes. 100% makes it pure black.</p>
+        <p style="font-size: 0.9em; margin-top: 0;">Controls how purely black the kept handwriting becomes.</p>
         <input type="range" id="puritySlider" min="0" max="100" value="100">
     </div>
 
-    <button id="processButton" disabled>Process and Update Image</button>
-
-    <h3>Input Image Preview:</h3>
-    <img id="preview-image" src="" alt="Image Preview" style="display: none;">
+    <button id="processButton" disabled>Re-Process Image</button>
 
     <canvas id="imageCanvas" style="display: none;"></canvas>
 
     <h3>Transparent Output:</h3>
     <div id="output-area">
-        <p>Your transparent image will appear here.</p>
+        <p>The result of the image processing will appear here.</p>
         <img id="transparentOutput" class="output-image" src="" alt="Transparent Text Output" style="display: none;">
         <a id="downloadLink" style="display: none; margin-top: 10px;" download="transparent_handwriting.png">Download PNG</a>
     </div>
@@ -108,12 +100,11 @@
     // --- DOM Elements ---
     const imageInput = document.getElementById('imageInput');
     const processButton = document.getElementById('processButton');
-    const previewImage = document.getElementById('preview-image');
     const imageCanvas = document.getElementById('imageCanvas');
     const statusElement = document.getElementById('status');
     const transparentOutput = document.getElementById('transparentOutput');
     const downloadLink = document.getElementById('downloadLink');
-    const ctx = imageCanvas.getContext('2d');
+    const ctx = imageCanvas.getContext('2d', { willReadFrequently: true }); // Optimization for frequent pixel reading
     
     const thresholdSlider = document.getElementById('thresholdSlider');
     const thresholdValueSpan = document.getElementById('thresholdValue');
@@ -122,52 +113,7 @@
 
     let uploadedImage = new Image();
     let isImageLoaded = false;
-
-    // --- Helper Functions ---
-    function updateThreshold(val) {
-        thresholdValueSpan.textContent = val;
-        if (isImageLoaded) {
-            processButton.disabled = false;
-        }
-    }
-
-    function updatePurity(val) {
-        purityValueSpan.textContent = val;
-        if (isImageLoaded) {
-            processButton.disabled = false;
-        }
-    }
-
-    // --- Event Listeners ---
-
-    // 1. Image Loading
-    imageInput.addEventListener('change', (event) => {
-        const file = event.target.files[0];
-        if (file) {
-            statusElement.textContent = 'Image loaded. Adjust sliders and click Process.';
-            isImageLoaded = true;
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                uploadedImage.onload = () => {
-                    previewImage.src = e.target.result;
-                    previewImage.style.display = 'block';
-                    processButton.disabled = false; // Enable process button after load
-                };
-                uploadedImage.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-        } else {
-            isImageLoaded = false;
-            processButton.disabled = true;
-        }
-    });
-
-    // 2. Slider Controls
-    thresholdSlider.addEventListener('input', (e) => updateThreshold(e.target.value));
-    puritySlider.addEventListener('input', (e) => updatePurity(e.target.value));
-    
-    // 3. Process Button
-    processButton.addEventListener('click', processImage);
+    let timeoutId = null; // Used for debouncing the slider input
 
     // --- Core Processing Function ---
     function processImage() {
@@ -178,10 +124,10 @@
         
         // Get current slider values
         const THRESHOLD = parseInt(thresholdSlider.value);
-        // Purity is a ratio: 100% -> 1.0; 0% -> 0.0
         const PURITY_RATIO = parseInt(puritySlider.value) / 100.0; 
+        const maxGrayscale = 255;
 
-        // 1. Set Canvas dimensions and draw the original image
+        // 1. Reset Canvas and draw the original image
         imageCanvas.width = uploadedImage.width;
         imageCanvas.height = uploadedImage.height;
         ctx.drawImage(uploadedImage, 0, 0);
@@ -189,7 +135,6 @@
         // 2. Get the raw pixel data
         const imageData = ctx.getImageData(0, 0, imageCanvas.width, imageCanvas.height);
         const data = imageData.data; 
-        const maxGrayscale = 255;
 
         // 3. Loop through every pixel
         for (let i = 0; i < data.length; i += 4) {
@@ -197,7 +142,7 @@
             const g = data[i + 1];
             const b = data[i + 2];
 
-            // Convert to grayscale
+            // Convert to grayscale using luminosity
             const grayscale = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
             if (grayscale > THRESHOLD) {
@@ -207,11 +152,8 @@
                 // Handwriting pixel: Keep it opaque (Alpha=255) and adjust color purity
                 data[i + 3] = 255; 
                 
-                // Calculate how much to convert the original color towards pure black (0)
-                // This gives the "Black Purity" effect
-                const textShade = grayscale / maxGrayscale; // 1.0 (white) to 0.0 (black)
-                
                 // Interpolate the current shade towards pure black (0) based on PURITY_RATIO
+                // newShade = grayscale * (1 - PURITY_RATIO) + 0 * PURITY_RATIO 
                 const newShade = Math.round(grayscale * (1 - PURITY_RATIO));
 
                 data[i] = newShade; 
@@ -232,13 +174,57 @@
         downloadLink.href = dataURL;
         downloadLink.style.display = 'inline-block';
         
-        statusElement.textContent = 'Processing Complete! Adjust sliders and re-process if needed.';
+        statusElement.textContent = 'Processing Complete!';
         processButton.disabled = false;
     }
-</script>
 
-</body>
-</html>
+    // --- Event Handlers ---
+    
+    // Function to handle slider changes with a debounce to prevent excessive processing
+    function handleSliderChange() {
+        // Update the value display immediately
+        thresholdValueSpan.textContent = thresholdSlider.value;
+        purityValueSpan.textContent = puritySlider.value;
+        
+        // Clear any existing timeout
+        clearTimeout(timeoutId);
+
+        // Set a new timeout: process the image 100ms after the user stops sliding
+        timeoutId = setTimeout(() => {
+            if (isImageLoaded) {
+                processImage();
+            }
+        }, 100); 
+    }
+
+    // 1. Image Loading
+    imageInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            statusElement.textContent = 'Image loaded. Adjust sliders now.';
+            isImageLoaded = true;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                uploadedImage.onload = () => {
+                    // Start processing immediately after the image loads
+                    processImage();
+                };
+                uploadedImage.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        } else {
+            isImageLoaded = false;
+            processButton.disabled = true;
+        }
+    });
+
+    // 2. Slider Controls: Use 'input' event for real-time changes
+    thresholdSlider.addEventListener('input', handleSliderChange);
+    puritySlider.addEventListener('input', handleSliderChange);
+    
+    // 3. Process Button (Used as a fallback/manual trigger)
+    processButton.addEventListener('click', processImage);
+</script>
 
 </body>
 </html>
