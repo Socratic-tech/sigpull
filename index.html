@@ -37,7 +37,7 @@
         }
         
         /* --- Standard Styling --- */
-        input[type="file"], button {
+        input[type="file"], button, input[type="text"] { /* Added input[type="text"] */
             margin-bottom: 10px;
             padding: 10px;
             border-radius: 4px;
@@ -73,12 +73,12 @@
         }
         
         #output-area {
-            margin-top: 5px; /* Reduced margin */
+            margin-top: 5px; 
             padding: 15px;
             border: 2px dashed #007bff;
             /* Checkerboard background to clearly show transparency */
             background: repeating-checkerboard 0 0 / 10px 10px #eee, repeating-checkerboard 5px 5px / 10px 10px #ccc;
-            min-height: 300px; /* Ensure output area has some height */
+            min-height: 300px;
             text-align: center;
         }
         .output-image {
@@ -101,7 +101,7 @@
 <body>
 
 <div class="container">
-    <h2>✂️ Transparent Extractor with Cropper</h2>
+    <h2>✍️ Transparent Extractor with Cropper</h2>
     <p id="status">Upload an image to start.</p>
     
     <input type="file" id="imageInput" accept="image/*">
@@ -137,10 +137,13 @@
 
         <div class="output-column">
             <h3>3. Transparent Output:</h3>
+            
+            <input type="text" id="fileNameInput" value="transparent_handwriting" placeholder="Enter file name here">
+            
             <div id="output-area">
                 <p>The final transparent image will appear here.</p>
                 <img id="transparentOutput" class="output-image" src="" alt="Transparent Text Output" style="display: none;">
-                <a id="downloadLink" style="display: none; margin-top: 10px; display: block;" download="transparent_handwriting.png">Download PNG</a>
+                <a id="downloadLink" style="display: none; margin-top: 10px; display: block; font-weight: bold; background-color: #007bff; color: white; text-decoration: none; padding: 10px; border-radius: 4px;" download="transparent_handwriting.png">Download PNG</a>
             </div>
         </div>
     </div>
@@ -161,6 +164,7 @@
     const statusElement = document.getElementById('status');
     const transparentOutput = document.getElementById('transparentOutput');
     const downloadLink = document.getElementById('downloadLink');
+    const fileNameInput = document.getElementById('fileNameInput'); // New element
     const ctx = imageCanvas.getContext('2d', { willReadFrequently: true });
     
     const thresholdSlider = document.getElementById('thresholdSlider');
@@ -230,13 +234,25 @@
         // 5. Generate the transparent PNG output
         const dataURL = imageCanvas.toDataURL('image/png');
 
-        // 6. Display the result
+        // 6. Display the result and update the download link
         transparentOutput.src = dataURL;
         transparentOutput.style.display = 'block';
+        
+        // Update the download link's href (data) and filename
         downloadLink.href = dataURL;
-        downloadLink.style.display = 'block'; // Ensure download link is visible
+        updateDownloadFileName(); // Call the function to set the file name
+        downloadLink.style.display = 'block'; 
         
         statusElement.textContent = 'Processing Complete! Tune sliders for instant updates.';
+    }
+
+    // --- Function to update the download file name ---
+    function updateDownloadFileName() {
+        const baseName = fileNameInput.value.trim() || 'transparent_handwriting';
+        // Sanitize name: replace spaces with underscores and remove non-word characters
+        const cleanName = baseName.replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_-]/g, '');
+        downloadLink.download = `${cleanName}.png`;
+        downloadLink.textContent = `Download: ${cleanName}.png`;
     }
 
     // --- Helper Function for Slider Debouncing ---
@@ -264,9 +280,13 @@
         const file = event.target.files[0];
         if (file) {
             isImageLoaded = true;
-            isCropped = false; // Reset crop status
+            isCropped = false; 
             
-            // Hide tuning controls and output area
+            // Set initial file name based on input file name (if available)
+            const baseFileName = file.name.substring(0, file.name.lastIndexOf('.')) || 'transparent_handwriting';
+            fileNameInput.value = baseFileName;
+
+            // Hide tuning controls and output
             tuningControls.style.display = 'none';
             transparentOutput.style.display = 'none';
             downloadLink.style.display = 'none';
@@ -281,7 +301,6 @@
                     croppableImage.style.display = 'block';
                     cropperContainer.style.display = 'block';
 
-                    // Destroy existing cropper instance if it exists
                     if (cropper) {
                         cropper.destroy();
                     }
@@ -311,7 +330,7 @@
         croppableImage.style.display = 'none';
         cropAndStartButton.disabled = true;
         tuningControls.style.display = 'block';
-        downloadLink.style.display = 'block'; // Ensure download button is visible
+        fileNameInput.style.display = 'block'; 
 
         // Start the first processing cycle with default slider values
         processImage();
@@ -321,6 +340,11 @@
     thresholdSlider.addEventListener('input', handleSliderChange);
     puritySlider.addEventListener('input', handleSliderChange);
     
+    // 4. File Name Input: Update the download link filename instantly
+    fileNameInput.addEventListener('input', updateDownloadFileName);
+
+    // Set initial download name
+    updateDownloadFileName();
 </script>
 
 </body>
