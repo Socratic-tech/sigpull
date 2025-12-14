@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handwriting Background Remover</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        input[type="file"], button {
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+        #preview-image {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 15px 0;
+            border: 1px dashed #ccc;
+        }
+        #output-area {
+            margin-top: 20px;
+            padding: 15px;
+            border: 2px dashed #007bff; /* Dashed border to emphasize transparency */
+            background-color: #ccc; /* A gray background to clearly show the transparent PNG */
+            min-height: 50px;
+            text-align: center;
+        }
+        .output-image {
+            max-width: 100%;
+            height: auto;
+            background: repeating-checkerboard 0 0 / 10px 10px #eee, repeating-checkerboard 5px 5px / 10px 10px #ccc; /* Checkerboard to denote transparency */
+        }
+        #status {
+            color: green;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>✍️ Transparent Handwriting Extractor</h2>
+    <p>Upload a photo of handwriting. The tool will attempt to isolate the dark text and make the background transparent.</p>
+
+    <input type="file" id="imageInput" accept="image/*">
+    <button id="processButton" disabled>Process Image</button>
+
+    <p id="status">Ready to process.</p>
+
+    <h3>Input Image Preview:</h3>
+    <img id="preview-image" src="" alt="Image Preview" style="display: none;">
+
+    <canvas id="imageCanvas" style="display: none;"></canvas>
+
+    <h3>Transparent Output:</h3>
+    <div id="output-area">
+        <p>Your transparent image will appear here.</p>
+        <img id="transparentOutput" class="output-image" src="" alt="Transparent Text Output" style="display: none;">
+        <a id="downloadLink" style="display: none; margin-top: 10px;" download="transparent_handwriting.png">Download PNG</a>
+    </div>
+</div>
+
+<script>
+    // --- Configuration ---
+    // Threshold value (0-255). Lower values make background removal more aggressive.
+    // This defines how dark a pixel must be to be considered part of the handwriting.
+    const THRESHOLD = 180; 
+
+    // --- DOM Elements ---
+    const imageInput = document.getElementById('imageInput');
+    const processButton = document.getElementById('processButton');
+    const previewImage = document.getElementById('preview-image');
+    const imageCanvas = document.getElementById('imageCanvas');
+    const statusElement = document.getElementById('status');
+    const transparentOutput = document.getElementById('transparentOutput');
+    const downloadLink = document.getElementById('downloadLink');
+    const ctx = imageCanvas.getContext('2d');
+    let uploadedImage = new Image();
+
+    // --- Event Listeners ---
+    imageInput.addEventListener('change', (event) => {
+        const file = event.target.files[0];
+        if (file) {
+            statusElement.textContent = 'Image loaded. Click Process.';
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                uploadedImage.onload = () => {
+                    previewImage.src = e.target.result;
+                    previewImage.style.display = 'block';
+                    processButton.disabled = false;
+                };
+                uploadedImage.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        } else {
+            processButton.disabled = true;
+        }
+    });
+
+    processButton.addEventListener('click', processImage);
+
+    // --- Core Processing Function ---
+    function processImage() {
+        statusElement.textContent = 'Processing...';
+        processButton.disabled = true;
+        
+        // 1. Set Canvas dimensions to match the image
+        imageCanvas.width = uploadedImage.width;
+        imageCanvas.height = uploadedImage.height;
+
+        // 2. Draw the original image onto the canvas
+        ctx.drawImage(uploadedImage, 0, 0);
+
+        // 3. Get the raw pixel data
+        const imageData = ctx.getImageData(0, 0, imageCanvas.width, imageCanvas.height);
+        const data = imageData.data; // An array of [R, G, B, A, R, G, B, A, ...]
+
+        // 4. Loop through every pixel (4 elements per pixel: R, G, B, A)
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];     // Red
+            const g = data[i + 1]; // Green
+            const b = data[i + 2]; // Blue
+            // const a = data[i + 3]; // Alpha (we modify this)
+
+            // Convert to a simple grayscale value using luminosity method
+            const grayscale = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+
+            // Apply the threshold logic
+            if (grayscale > THRESHOLD) {
+                // If the pixel is Lighter than the THRESHOLD (likely background)
+                data[i + 3] = 0; // Set Alpha to 0 (Fully Transparent)
+            } else {
+                // If the pixel is Darker than the THRESHOLD (likely handwriting)
+                // Optional: Make text pure black for a cleaner look
+                data[i] = 0;     // Red = 0
+                data[i + 1] = 0; // Green = 0
+                data[i + 2] = 0; // Blue = 0
+                data[i + 3] = 255; // Set Alpha to 255 (Fully Opaque)
+            }
+        }
+
+        // 5. Put the modified pixel data back onto the canvas
+        ctx.putImageData(imageData, 0, 0);
+
+        // 6. Generate the transparent PNG output
+        const dataURL = imageCanvas.toDataURL('image/png');
+
+        // 7. Display the result
+        transparentOutput.src = dataURL;
+        transparentOutput.style.display = 'block';
+        downloadLink.href = dataURL;
+        downloadLink.style.display = 'inline-block';
+        
+        statusElement.textContent = 'Processing Complete! Transparent PNG generated.';
+        processButton.disabled = false;
+    }
+</script>
+
+</body>
+</html>
