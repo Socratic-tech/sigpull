@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Handwriting Background Remover</title>
+    <title>Tunable Handwriting Background Remover</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -24,6 +24,20 @@
             border-radius: 4px;
             border: 1px solid #ccc;
         }
+        .control-group {
+            margin-bottom: 15px;
+            padding: 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .slider-label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="range"] {
+            width: 100%;
+        }
         #preview-image {
             max-width: 100%;
             height: auto;
@@ -34,32 +48,48 @@
         #output-area {
             margin-top: 20px;
             padding: 15px;
-            border: 2px dashed #007bff; /* Dashed border to emphasize transparency */
-            background-color: #ccc; /* A gray background to clearly show the transparent PNG */
+            border: 2px dashed #007bff;
+            /* Checkerboard background to clearly show transparency */
+            background: repeating-checkerboard 0 0 / 10px 10px #eee, repeating-checkerboard 5px 5px / 10px 10px #ccc;
             min-height: 50px;
             text-align: center;
         }
         .output-image {
             max-width: 100%;
             height: auto;
-            background: repeating-checkerboard 0 0 / 10px 10px #eee, repeating-checkerboard 5px 5px / 10px 10px #ccc; /* Checkerboard to denote transparency */
         }
         #status {
-            color: green;
             font-weight: bold;
+            margin-bottom: 10px;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>✍️ Transparent Handwriting Extractor</h2>
-    <p>Upload a photo of handwriting. The tool will attempt to isolate the dark text and make the background transparent.</p>
+    <h2>🎚️ Tunable Transparent Handwriting Extractor</h2>
+    <p>Upload an image and use the sliders to fine-tune the background removal.</p>
 
     <input type="file" id="imageInput" accept="image/*">
-    <button id="processButton" disabled>Process Image</button>
+    <p id="status">Upload an image to start.</p>
+    
+    <div class="control-group">
+        <label for="thresholdSlider" class="slider-label">
+            Threshold (<span id="thresholdValue">180</span>):
+        </label>
+        <p style="font-size: 0.9em; margin-top: 0;">Controls background removal. Lower value keeps less background (more aggressive).</p>
+        <input type="range" id="thresholdSlider" min="1" max="255" value="180">
+    </div>
 
-    <p id="status">Ready to process.</p>
+    <div class="control-group">
+        <label for="puritySlider" class="slider-label">
+            Black Purity (<span id="purityValue">100</span>%):
+        </label>
+        <p style="font-size: 0.9em; margin-top: 0;">Controls how purely black the kept handwriting becomes. 100% makes it pure black.</p>
+        <input type="range" id="puritySlider" min="0" max="100" value="100">
+    </div>
+
+    <button id="processButton" disabled>Process and Update Image</button>
 
     <h3>Input Image Preview:</h3>
     <img id="preview-image" src="" alt="Image Preview" style="display: none;">
@@ -75,11 +105,6 @@
 </div>
 
 <script>
-    // --- Configuration ---
-    // Threshold value (0-255). Lower values make background removal more aggressive.
-    // This defines how dark a pixel must be to be considered part of the handwriting.
-    const THRESHOLD = 180; 
-
     // --- DOM Elements ---
     const imageInput = document.getElementById('imageInput');
     const processButton = document.getElementById('processButton');
@@ -89,86 +114,131 @@
     const transparentOutput = document.getElementById('transparentOutput');
     const downloadLink = document.getElementById('downloadLink');
     const ctx = imageCanvas.getContext('2d');
+    
+    const thresholdSlider = document.getElementById('thresholdSlider');
+    const thresholdValueSpan = document.getElementById('thresholdValue');
+    const puritySlider = document.getElementById('puritySlider');
+    const purityValueSpan = document.getElementById('purityValue');
+
     let uploadedImage = new Image();
+    let isImageLoaded = false;
+
+    // --- Helper Functions ---
+    function updateThreshold(val) {
+        thresholdValueSpan.textContent = val;
+        if (isImageLoaded) {
+            processButton.disabled = false;
+        }
+    }
+
+    function updatePurity(val) {
+        purityValueSpan.textContent = val;
+        if (isImageLoaded) {
+            processButton.disabled = false;
+        }
+    }
 
     // --- Event Listeners ---
+
+    // 1. Image Loading
     imageInput.addEventListener('change', (event) => {
         const file = event.target.files[0];
         if (file) {
-            statusElement.textContent = 'Image loaded. Click Process.';
+            statusElement.textContent = 'Image loaded. Adjust sliders and click Process.';
+            isImageLoaded = true;
             const reader = new FileReader();
             reader.onload = function(e) {
                 uploadedImage.onload = () => {
                     previewImage.src = e.target.result;
                     previewImage.style.display = 'block';
-                    processButton.disabled = false;
+                    processButton.disabled = false; // Enable process button after load
                 };
                 uploadedImage.src = e.target.result;
             };
             reader.readAsDataURL(file);
         } else {
+            isImageLoaded = false;
             processButton.disabled = true;
         }
     });
 
+    // 2. Slider Controls
+    thresholdSlider.addEventListener('input', (e) => updateThreshold(e.target.value));
+    puritySlider.addEventListener('input', (e) => updatePurity(e.target.value));
+    
+    // 3. Process Button
     processButton.addEventListener('click', processImage);
 
     // --- Core Processing Function ---
     function processImage() {
+        if (!isImageLoaded) return;
+        
         statusElement.textContent = 'Processing...';
         processButton.disabled = true;
         
-        // 1. Set Canvas dimensions to match the image
+        // Get current slider values
+        const THRESHOLD = parseInt(thresholdSlider.value);
+        // Purity is a ratio: 100% -> 1.0; 0% -> 0.0
+        const PURITY_RATIO = parseInt(puritySlider.value) / 100.0; 
+
+        // 1. Set Canvas dimensions and draw the original image
         imageCanvas.width = uploadedImage.width;
         imageCanvas.height = uploadedImage.height;
-
-        // 2. Draw the original image onto the canvas
         ctx.drawImage(uploadedImage, 0, 0);
 
-        // 3. Get the raw pixel data
+        // 2. Get the raw pixel data
         const imageData = ctx.getImageData(0, 0, imageCanvas.width, imageCanvas.height);
-        const data = imageData.data; // An array of [R, G, B, A, R, G, B, A, ...]
+        const data = imageData.data; 
+        const maxGrayscale = 255;
 
-        // 4. Loop through every pixel (4 elements per pixel: R, G, B, A)
+        // 3. Loop through every pixel
         for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];     // Red
-            const g = data[i + 1]; // Green
-            const b = data[i + 2]; // Blue
-            // const a = data[i + 3]; // Alpha (we modify this)
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
 
-            // Convert to a simple grayscale value using luminosity method
+            // Convert to grayscale
             const grayscale = 0.2126 * r + 0.7152 * g + 0.0722 * b;
 
-            // Apply the threshold logic
             if (grayscale > THRESHOLD) {
-                // If the pixel is Lighter than the THRESHOLD (likely background)
-                data[i + 3] = 0; // Set Alpha to 0 (Fully Transparent)
+                // Background pixel: Set Alpha to 0 (Fully Transparent)
+                data[i + 3] = 0; 
             } else {
-                // If the pixel is Darker than the THRESHOLD (likely handwriting)
-                // Optional: Make text pure black for a cleaner look
-                data[i] = 0;     // Red = 0
-                data[i + 1] = 0; // Green = 0
-                data[i + 2] = 0; // Blue = 0
-                data[i + 3] = 255; // Set Alpha to 255 (Fully Opaque)
+                // Handwriting pixel: Keep it opaque (Alpha=255) and adjust color purity
+                data[i + 3] = 255; 
+                
+                // Calculate how much to convert the original color towards pure black (0)
+                // This gives the "Black Purity" effect
+                const textShade = grayscale / maxGrayscale; // 1.0 (white) to 0.0 (black)
+                
+                // Interpolate the current shade towards pure black (0) based on PURITY_RATIO
+                const newShade = Math.round(grayscale * (1 - PURITY_RATIO));
+
+                data[i] = newShade; 
+                data[i + 1] = newShade;
+                data[i + 2] = newShade;
             }
         }
 
-        // 5. Put the modified pixel data back onto the canvas
+        // 4. Put the modified pixel data back onto the canvas
         ctx.putImageData(imageData, 0, 0);
 
-        // 6. Generate the transparent PNG output
+        // 5. Generate the transparent PNG output
         const dataURL = imageCanvas.toDataURL('image/png');
 
-        // 7. Display the result
+        // 6. Display the result
         transparentOutput.src = dataURL;
         transparentOutput.style.display = 'block';
         downloadLink.href = dataURL;
         downloadLink.style.display = 'inline-block';
         
-        statusElement.textContent = 'Processing Complete! Transparent PNG generated.';
+        statusElement.textContent = 'Processing Complete! Adjust sliders and re-process if needed.';
         processButton.disabled = false;
     }
 </script>
+
+</body>
+</html>
 
 </body>
 </html>
