@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Croppable Transparent Handwriting Extractor</title>
+    <title>Two-Column Transparent Handwriting Extractor</title>
     
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     
@@ -14,18 +14,36 @@
             background-color: #f4f4f9;
         }
         .container {
-            max-width: 800px;
+            max-width: 1200px; /* Increased max width for columns */
             margin: auto;
             background: #fff;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
+        
+        /* --- Flexbox Layout for Two Columns --- */
+        .main-content {
+            display: flex;
+            gap: 20px; /* Space between columns */
+        }
+        .controls-column {
+            flex: 1; /* Takes up 50% of the space */
+            min-width: 300px; 
+            padding-right: 10px;
+        }
+        .output-column {
+            flex: 1; /* Takes up 50% of the space */
+        }
+        
+        /* --- Standard Styling --- */
         input[type="file"], button {
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             padding: 10px;
             border-radius: 4px;
             border: 1px solid #ccc;
+            width: 100%; /* Full width for better layout */
+            box-sizing: border-box;
         }
         .control-group {
             margin-bottom: 15px;
@@ -44,21 +62,23 @@
 
         /* Cropper container style */
         #cropper-container {
-            max-height: 500px; /* Limit the size of the cropper view */
+            max-height: 500px; 
             margin-bottom: 20px;
             overflow: hidden;
-            display: none; /* Hide until image is loaded */
+            border: 1px dashed #007bff;
+            display: none; 
         }
         #croppableImage {
-            max-width: 100%; /* Important for Cropper.js */
+            max-width: 100%;
         }
         
         #output-area {
-            margin-top: 20px;
+            margin-top: 5px; /* Reduced margin */
             padding: 15px;
             border: 2px dashed #007bff;
+            /* Checkerboard background to clearly show transparency */
             background: repeating-checkerboard 0 0 / 10px 10px #eee, repeating-checkerboard 5px 5px / 10px 10px #ccc;
-            min-height: 50px;
+            min-height: 300px; /* Ensure output area has some height */
             text-align: center;
         }
         .output-image {
@@ -69,49 +89,62 @@
             font-weight: bold;
             margin-bottom: 10px;
         }
+
+        /* Media Query for smaller screens (makes it vertical again) */
+        @media (max-width: 768px) {
+            .main-content {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h2>✂️ Transparent Extractor with Cropper</h2>
-    <p>Upload an image, set the crop area, and then use the sliders to fine-tune the background removal.</p>
-
-    <input type="file" id="imageInput" accept="image/*">
     <p id="status">Upload an image to start.</p>
     
-    <h3>1. Crop Area Selection:</h3>
-    <div id="cropper-container">
-        <img id="croppableImage" src="" alt="Image to Crop" style="display: none;">
-    </div>
-    <button id="cropAndStartButton" disabled>Crop and Start Tuning</button>
+    <input type="file" id="imageInput" accept="image/*">
 
-    <div id="tuningControls" style="display: none;">
-        <h3>2. Background Tuning:</h3>
-        <div class="control-group">
-            <label for="thresholdSlider" class="slider-label">
-                Threshold (<span id="thresholdValue">180</span>):
-            </label>
-            <p style="font-size: 0.9em; margin-top: 0;">Controls background removal. Lower value keeps less background.</p>
-            <input type="range" id="thresholdSlider" min="1" max="255" value="180">
+    <div class="main-content">
+        <div class="controls-column">
+            
+            <h3>1. Crop Selection:</h3>
+            <div id="cropper-container">
+                <img id="croppableImage" src="" alt="Image to Crop" style="display: none;">
+            </div>
+            <button id="cropAndStartButton" disabled>Crop and Start Tuning</button>
+
+            <div id="tuningControls" style="display: none;">
+                <h3>2. Background Tuning:</h3>
+                <div class="control-group">
+                    <label for="thresholdSlider" class="slider-label">
+                        Threshold (<span id="thresholdValue">180</span>):
+                    </label>
+                    <p style="font-size: 0.9em; margin-top: 0;">Lower value keeps less background.</p>
+                    <input type="range" id="thresholdSlider" min="1" max="255" value="180">
+                </div>
+
+                <div class="control-group">
+                    <label for="puritySlider" class="slider-label">
+                        Black Purity (<span id="purityValue">100</span>%):
+                    </label>
+                    <p style="font-size: 0.9em; margin-top: 0;">Controls how purely black the kept handwriting becomes.</p>
+                    <input type="range" id="puritySlider" min="0" max="100" value="100">
+                </div>
+            </div>
         </div>
 
-        <div class="control-group">
-            <label for="puritySlider" class="slider-label">
-                Black Purity (<span id="purityValue">100</span>%):
-            </label>
-            <p style="font-size: 0.9em; margin-top: 0;">Controls how purely black the kept handwriting becomes.</p>
-            <input type="range" id="puritySlider" min="0" max="100" value="100">
+        <div class="output-column">
+            <h3>3. Transparent Output:</h3>
+            <div id="output-area">
+                <p>The final transparent image will appear here.</p>
+                <img id="transparentOutput" class="output-image" src="" alt="Transparent Text Output" style="display: none;">
+                <a id="downloadLink" style="display: none; margin-top: 10px; display: block;" download="transparent_handwriting.png">Download PNG</a>
+            </div>
         </div>
     </div>
     
-    <h3>3. Transparent Output:</h3>
-    <div id="output-area">
-        <p>The final transparent image will appear here.</p>
-        <img id="transparentOutput" class="output-image" src="" alt="Transparent Text Output" style="display: none;">
-        <a id="downloadLink" style="display: none; margin-top: 10px;" download="transparent_handwriting.png">Download PNG</a>
-    </div>
-
     <canvas id="imageCanvas" style="display: none;"></canvas>
 </div>
 
@@ -151,7 +184,6 @@
         }
         
         // 1. Get the cropped image data as a Blob/DataURL
-        // We do this by drawing the cropped canvas data back onto the working canvas
         const croppedCanvas = cropper.getCroppedCanvas();
         imageCanvas.width = croppedCanvas.width;
         imageCanvas.height = croppedCanvas.height;
@@ -202,7 +234,7 @@
         transparentOutput.src = dataURL;
         transparentOutput.style.display = 'block';
         downloadLink.href = dataURL;
-        downloadLink.style.display = 'inline-block';
+        downloadLink.style.display = 'block'; // Ensure download link is visible
         
         statusElement.textContent = 'Processing Complete! Tune sliders for instant updates.';
     }
@@ -234,32 +266,35 @@
             isImageLoaded = true;
             isCropped = false; // Reset crop status
             
-            // Hide output controls and area
+            // Hide tuning controls and output area
             tuningControls.style.display = 'none';
             transparentOutput.style.display = 'none';
             downloadLink.style.display = 'none';
             
-            statusElement.textContent = 'Image loaded. Please select the area to crop.';
+            statusElement.textContent = 'Image loaded. Please select the area to crop in the left panel.';
             cropAndStartButton.disabled = false;
 
             const reader = new FileReader();
             reader.onload = function(e) {
-                croppableImage.src = e.target.result;
-                croppableImage.style.display = 'block';
-                cropperContainer.style.display = 'block';
+                uploadedImage.onload = () => {
+                    croppableImage.src = e.target.result;
+                    croppableImage.style.display = 'block';
+                    cropperContainer.style.display = 'block';
 
-                // Destroy existing cropper instance if it exists
-                if (cropper) {
-                    cropper.destroy();
-                }
+                    // Destroy existing cropper instance if it exists
+                    if (cropper) {
+                        cropper.destroy();
+                    }
 
-                // Initialize Cropper.js
-                cropper = new Cropper(croppableImage, {
-                    aspectRatio: NaN, // Allow free aspect ratio
-                    viewMode: 1,      // Restrict the crop box to not exceed the canvas
-                    dragMode: 'move', // Move the canvas/image when dragging outside the crop box
-                    autoCropArea: 0.9 // Start with a large crop area
-                });
+                    // Initialize Cropper.js
+                    cropper = new Cropper(croppableImage, {
+                        aspectRatio: NaN, 
+                        viewMode: 1, 
+                        dragMode: 'move', 
+                        autoCropArea: 0.9 
+                    });
+                };
+                uploadedImage.src = e.target.result;
             };
             reader.readAsDataURL(file);
         }
@@ -276,6 +311,7 @@
         croppableImage.style.display = 'none';
         cropAndStartButton.disabled = true;
         tuningControls.style.display = 'block';
+        downloadLink.style.display = 'block'; // Ensure download button is visible
 
         // Start the first processing cycle with default slider values
         processImage();
